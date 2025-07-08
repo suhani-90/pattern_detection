@@ -1,0 +1,8 @@
+numpy
+pandas
+stumpy
+torch
+tslearn
+matplotlib
+kneed
+tsai
