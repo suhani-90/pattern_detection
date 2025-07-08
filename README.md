@@ -30,7 +30,7 @@ This step reads a raw time series CSV, finds patterns for different window sizes
 **Usage:**
 ```bash
 python discover_patterns.py --filepath /path/to/your/data.csv
-
+```
 
 ### Step 2: Analyze Saved Patterns
 
