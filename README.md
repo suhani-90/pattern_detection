@@ -30,24 +30,7 @@ This step reads a raw time series CSV, finds patterns for different window sizes
 **Usage:**
 ```bash
 python discover_patterns.py --filepath /path/to/your/data.csv
-```
 
-For example:
-```bash
-python discover_patterns.py --filepath ZOMATO_NSE.csv
-```
-
-This will create a directory structure like:
-```
-discovery_output/
-└── ZOMATO_NSE/
-    ├── discovery_artifacts.npz   <-- ALL pattern data is in this one file
-    ├── w_50_plots/
-    │   └── cluster_shapes.png
-    └── w_75_plots/
-        └── cluster_shapes.png
-    ...
-```
 
 ### Step 2: Analyze Saved Patterns
 
@@ -56,11 +39,6 @@ This step loads the single `discovery_artifacts.npz` file and performs three dif
 **Usage:**
 ```bash
 python analyze_patterns.py --filepath /path/to/your/data.csv --discovery_dir /path/to/discovery_output
-```
-
-For example:
-```bash
-python analyze_patterns.py --filepath ZOMATO_NSE.csv --discovery_dir discovery_output
 ```
 
 This will generate the same detailed results folder as before, correctly organized by analysis type and window size.
