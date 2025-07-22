@@ -15,16 +15,16 @@ from typing import Dict, Any, Optional, Tuple, List
 #Configuration
 CONFIG = {
     "output_dir": "output/discovery",
-    "window_size_range": range(15,45,15),
+    "window_size_range": range(15,61,15),
     "k_range_to_test": range(2, 11),
-    "candidate_percentile": 10,
+    "candidate_percentile": 15,
     "kmeans_max_iter_elbow": 5,
     "kmeans_max_iter_final": 15,
     "dtw_window_frac": 0.2, #Sakoe-Chiba window size (Fraction of window size)
     "random_state": 42,
 }
 
-# ... (load_and_prepare_data, calculate_matrix_profile, extract_and_normalize_candidates are unchanged) ...
+#Loading data
 def load_and_prepare_data(filepath: str) -> Optional[np.ndarray]:
     print(f"Loading data from '{filepath}'...")
     try:
@@ -36,6 +36,7 @@ def load_and_prepare_data(filepath: str) -> Optional[np.ndarray]:
         print(f"ERROR: Could not load data. {e}")
         return None
 
+#Matrix Profile
 def calculate_matrix_profile(ts: np.ndarray, window_size: int) -> np.ndarray:
     print(f"Calculating Matrix Profile for window size {window_size}")
     start_time = time.time()
@@ -46,13 +47,16 @@ def calculate_matrix_profile(ts: np.ndarray, window_size: int) -> np.ndarray:
     print(f"Matrix Profile computed in {time.time() - start_time:.2f} seconds.")
     return matrix_profile
 
-def extract_and_normalize_candidates(matrix_profile: np.ndarray, ts: np.ndarray, window_size: int, percentile_threshold: int = 1) -> Tuple[np.ndarray, np.ndarray]:
+#Candidate Motif Sleection
+def extract_and_normalize_candidates(matrix_profile: np.ndarray, ts: np.ndarray, window_size: int, percentile_threshold:int = 10) -> Tuple[np.ndarray, np.ndarray]:
     print("Selecting and Normalizing Candidates...")
     mp_values = matrix_profile[:, 0].astype(np.float64)
     if not np.any(np.isfinite(mp_values)):
         return np.array([]), np.array([])
     threshold = np.percentile(mp_values[np.isfinite(mp_values)], percentile_threshold)
+    print(threshold)
     candidate_indices = np.where(mp_values < threshold)[0]
+    print(f"Found {len(candidate_indices)} raw motifs under the threshold (before filtering).")
     filtered_indices, last_idx = [], -np.inf
     for idx in sorted(candidate_indices):
         if idx >= last_idx + window_size:
@@ -68,12 +72,10 @@ def extract_and_normalize_candidates(matrix_profile: np.ndarray, ts: np.ndarray,
     print(f"Identified and Z-Normalized {len(X)} candidates.")
     return X, np.array(final_original_indices)
 
-
-# <<< MODIFIED >>>
-# Function now returns BOTH the optimal K and the KneeLocator object for plotting.
-# It is no longer responsible for saving the plot.
+#Elbow
 def find_optimal_k(X: np.ndarray, k_range: range, config: Dict[str, Any]) -> Tuple[Optional[int], Optional[KneeLocator]]:
     print("Finding Optimal K...")
+    start_time = time.time()
     if len(X) < max(k_range):
         return None, None
 
@@ -87,6 +89,7 @@ def find_optimal_k(X: np.ndarray, k_range: range, config: Dict[str, Any]) -> Tup
         optimal_k = kl.elbow
         if optimal_k:
             print(f"Detected optimal k = {optimal_k}")
+            print(f"optimal k in {time.time() - start_time:.2f} seconds.")
         else:
             print("Could not find a clear elbow point.")
         return optimal_k, kl # Return the locator object itself
@@ -94,12 +97,12 @@ def find_optimal_k(X: np.ndarray, k_range: range, config: Dict[str, Any]) -> Tup
         print("An exception occurred during knee detection.")
         return None, None
 
-
+#visualization
 def visualize_and_save_clusters(
     X: np.ndarray, clusters: np.ndarray, centroids: np.ndarray,
     window_size: int, optimal_k: int, output_path: str
 ):
-    """Visualizes the discovered clusters and saves the plot."""
+   
     print(f"Visualizing clusters for w={window_size}, k={optimal_k}")
     fig, axs = plt.subplots(optimal_k, 1, figsize=(14, 4 * optimal_k), sharex=True, squeeze=False)
     fig.suptitle(f'Discovered Pattern Clusters (Window Size = {window_size}, k={optimal_k})', fontsize=20, y=1.0)
@@ -117,12 +120,11 @@ def visualize_and_save_clusters(
     plt.close(fig)
     print(f"Saved cluster visualization to {output_path}")
 
-# Main
-# ... (all functions before main are the same) ...
+
 
 # Main
 def main(config: Dict[str, Any]):
-    # ... (parser and setup code is the same) ...
+    
     parser = argparse.ArgumentParser(description="Discover and save time series patterns.")
     parser.add_argument("--filepath", type=str, required=True, help="Path to the input CSV file.")
     args = parser.parse_args()
@@ -142,7 +144,7 @@ def main(config: Dict[str, Any]):
     results_window_sizes = []
     results_k = []
 
-    # ... (the main 'for window_size in ...' loop is unchanged) ...
+    
     for window_size in config["window_size_range"]:
         print(f"\n{'='*25} PROCESSING WINDOW SIZE: {window_size} {'='*25}")
 
@@ -166,7 +168,7 @@ def main(config: Dict[str, Any]):
 
         if optimal_k:
             print(f"--- Performing Final Clustering with k={optimal_k} ---")
-
+            start_time = time.time()
             sakoe_chiba_window = int(config["dtw_window_frac"] * window_size)
             print(f"Using constrained DTW with a Sakoe-Chiba window of {sakoe_chiba_window}")
 
@@ -188,7 +190,7 @@ def main(config: Dict[str, Any]):
             results_indices.append(original_indices)
             results_window_sizes.append(window_size)
             results_k.append(optimal_k)
-
+             
             window_plot_dir = os.path.join(file_specific_output_dir, f"w_{window_size}_plots")
             os.makedirs(window_plot_dir, exist_ok=True)
             plot_path = os.path.join(window_plot_dir, "cluster_shapes.png")
@@ -198,16 +200,6 @@ def main(config: Dict[str, Any]):
     if results_window_sizes:
         artifacts_path = os.path.join(file_specific_output_dir, "discovery_artifacts.npz")
         
-        # <<< MODIFIED SECTION - THIS IS THE FIX >>>
-        
-        # Problematic lines that we are replacing:
-        # X_list=np.array(results_X, dtype=object),
-        # clusters_list=np.array(results_clusters, dtype=object),
-        # centroids_list=np.array(results_centroids, dtype=object),
-        # indices_list=np.array(results_indices, dtype=object),
-        
-        # Create empty arrays with dtype=object first, then fill them.
-        # This is the robust way to handle lists of arrays with different shapes.
         num_results = len(results_window_sizes)
 
         final_X = np.empty(num_results, dtype=object)
@@ -230,7 +222,7 @@ def main(config: Dict[str, Any]):
             window_sizes=np.array(results_window_sizes),
             k_values=np.array(results_k)
         )
-        # <<< END OF MODIFIED SECTION >>>
+        print(f"Process Completed{time.time() - start_time:.2f} seconds.")
 
         print(f"\nSuccessfully saved all pattern data to: {artifacts_path}")
     else:
